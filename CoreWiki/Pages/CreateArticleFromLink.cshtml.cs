@@ -1,56 +1,61 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using CoreWiki.Data.Data.Interfaces;
+using CoreWiki.Data.Models;
 using CoreWiki.Helpers;
-using CoreWiki.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
 using NodaTime;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace CoreWiki.Pages
 {
 	[Authorize]
 	public class CreateArticleFromLinkModel : PageModel
-    {
+	{
 		[BindProperty]
-		public Article Article { get; set; }
+		public ArticleCreateFromLinkDTO Article { get; set; }
 		[BindProperty]
 		public List<string> LinksToCreate { get; set; } = new List<string>();
 
-		private readonly ApplicationDbContext _context;
+		private readonly IArticleRepository _articleRepo;
 		private readonly IClock _clock;
 
-		public CreateArticleFromLinkModel(ApplicationDbContext context, IClock clock)
+		public CreateArticleFromLinkModel(IArticleRepository articleRepo, IClock clock)
 		{
-			_context = context;
+			_articleRepo = articleRepo;
 			_clock = clock;
 		}
 
 		public async Task<IActionResult> OnGetAsync(string id)
-        {
+		{
 			if (id == null)
 			{
 				return NotFound();
 			}
 
-			Article = await _context.Articles.SingleOrDefaultAsync(m => m.Slug == id);
+			var article = await _articleRepo.GetArticleBySlug(id);
 
-			if (Article == null)
+			if (article == null)
 			{
 				return new ArticleNotFoundResult();
 			}
 
-			LinksToCreate = ArticleHelpers.GetArticlesToCreate(_context, Article).ToList();
+			LinksToCreate = (await ArticleHelpers.GetArticlesToCreate(_articleRepo, article)).ToList();
 
 			if (LinksToCreate.Count == 0)
 			{
-				return Redirect($"/{(Article.Slug == "home-page" ? "" : Article.Slug)}");
+				return Redirect($"/wiki/{(article.Slug == UrlHelpers.HomePageSlug ? "" : article.Slug)}");
 			}
 
+			Article = new ArticleCreateFromLinkDTO
+			{
+				Slug = article.Slug
+			};
+
 			return Page();
-        }
+		}
 
 		public async Task<IActionResult> OnPostCreateLinksAsync(string slug)
 		{
@@ -65,16 +70,16 @@ namespace CoreWiki.Pages
 					Content = string.Empty
 				};
 
-				_context.Articles.Add(newArticle);
-				await _context.SaveChangesAsync();
+				newArticle = await _articleRepo.CreateArticleAndHistory(newArticle);
+
 			}
 
-			return Redirect($"/{(slug == "home-page" ? "" : slug)}");
+			return Redirect($"/wiki/{(slug == UrlHelpers.HomePageSlug ? "" : slug)}");
 		}
 
 		public IActionResult OnPostCancel(string slug)
 		{
-			return Redirect($"/{(slug == "home-page" ? "" : slug)}");
+			return Redirect($"/wiki/{(slug == UrlHelpers.HomePageSlug ? "" : slug)}");
 		}
 	}
 }

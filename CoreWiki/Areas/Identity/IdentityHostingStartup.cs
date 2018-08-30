@@ -1,10 +1,6 @@
-﻿using System;
-using CoreWiki.Areas.Identity.Data;
-using CoreWiki.Models;
-using Microsoft.AspNetCore.Builder;
+﻿using CoreWiki.Data.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.UI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,40 +14,42 @@ namespace CoreWiki.Areas.Identity
 		{
 			builder.ConfigureServices((context, services) =>
 			{
-				services.AddDbContext<CoreWikiIdentityContext>(options =>
-																	options.UseSqlite(
-																					context.Configuration.GetConnectionString("CoreWikiIdentityContextConnection")));
+				bool.TryParse(context.Configuration["Authentication:RequireConfirmedEmail"],
+					out var requireConfirmedEmail);
 
-				services.AddDefaultIdentity<CoreWikiUser>()
-																	.AddEntityFrameworkStores<CoreWikiIdentityContext>();
+				services.AddDbContext<CoreWikiIdentityContext>(options =>
+					options.UseSqlite(
+						context.Configuration.GetConnectionString("CoreWikiIdentityContextConnection")));
+
+				services.AddIdentity<CoreWikiUser, IdentityRole>(options =>
+						options.SignIn.RequireConfirmedEmail = requireConfirmedEmail)
+					.AddRoles<IdentityRole>()
+					.AddRoleManager<RoleManager<IdentityRole>>()
+					.AddDefaultUI()
+					.AddDefaultTokenProviders()
+					.AddEntityFrameworkStores<CoreWikiIdentityContext>();
 
 				var authBuilder = services.AddAuthentication();
 
 				if (!string.IsNullOrEmpty(context.Configuration["Authentication:Microsoft:ApplicationId"]))
 				{
-
 					authBuilder.AddMicrosoftAccount(microsoftOptions =>
 					{
 						microsoftOptions.ClientId = context.Configuration["Authentication:Microsoft:ApplicationId"];
 						microsoftOptions.ClientSecret = context.Configuration["Authentication:Microsoft:Password"];
 					});
-
 				}
 
 				if (!string.IsNullOrEmpty(context.Configuration["Authentication:Twitter:ConsumerKey"]))
 				{
-
 					authBuilder.AddTwitter(twitterOptions =>
 					{
 						twitterOptions.ConsumerKey = context.Configuration["Authentication:Twitter:ConsumerKey"];
 						twitterOptions.ConsumerSecret = context.Configuration["Authentication:Twitter:ConsumerSecret"];
 					});
-
 				}
 
-				services.AddAuthorization(AuthorizationPolicy.Execute);
-
-
+				services.AddAuthorization(AuthPolicy.Execute);
 			});
 		}
 	}

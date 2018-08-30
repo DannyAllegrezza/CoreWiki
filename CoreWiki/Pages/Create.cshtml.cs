@@ -1,30 +1,32 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using CoreWiki.Areas.Identity;
+using CoreWiki.Data.Data.Interfaces;
+using CoreWiki.Data.Models;
+using CoreWiki.Helpers;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using NodaTime;
-using CoreWiki.Models;
-using CoreWiki.Helpers;
 using Microsoft.Extensions.Logging;
-using CoreWiki.Areas.Identity.Data;
+using NodaTime;
+using System;
+using System.Linq;
 using System.Security.Claims;
-using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
 
 namespace CoreWiki.Pages
 {
+
+	[Authorize(Policy =PolicyConstants.CanWriteArticles)]
 	public class CreateModel : PageModel
 	{
-		private readonly ApplicationDbContext _context;
+
+		private readonly IArticleRepository _articleRepo;
 		private readonly IClock _clock;
 
 		public ILogger Logger { get; private set; }
 
-		public CreateModel(ApplicationDbContext context, IClock clock, ILoggerFactory loggerFactory)
+		public CreateModel(IArticleRepository articleRepo, IClock clock, ILoggerFactory loggerFactory)
 		{
-			_context = context;
+			_articleRepo = articleRepo;
 			_clock = clock;
 			this.Logger = loggerFactory.CreateLogger("CreatePage");
 		}
@@ -36,14 +38,12 @@ namespace CoreWiki.Pages
 				return Page();
 			}
 
-			Article article = await _context.Articles.SingleOrDefaultAsync(m => m.Slug == slug);
-
-			if (article != null)
+			if (await _articleRepo.GetArticleBySlug(slug) != null)
 			{
 				return Redirect($"/{slug}/Edit");
 			}
 
-			Article = new Article()
+			Article = new ArticleCreateDTO()
 			{
 				Topic = UrlHelpers.SlugToTopic(slug)
 			};
@@ -52,14 +52,24 @@ namespace CoreWiki.Pages
 		}
 
 		[BindProperty]
-		public Article Article { get; set; }
+		public ArticleCreateDTO Article { get; set; }
 
 		public async Task<IActionResult> OnPostAsync()
 		{
 
-            var slug = UrlHelpers.URLFriendly(Article.Topic.ToLower());
-            Article.Slug = slug;
-			Article.AuthorId = Guid.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier));
+			var slug = UrlHelpers.URLFriendly(Article.Topic);
+			if (string.IsNullOrWhiteSpace(slug))
+			{
+				ModelState.AddModelError("Article.Topic", "The Topic must contain at least one alphanumeric character.");
+				return Page();
+			}
+
+			var article = new Article();
+			article.Topic = Article.Topic;
+			article.Slug = slug;
+			article.Content = Article.Content;
+			article.AuthorId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+			article.AuthorName = User.Identity.Name;
 
 			if (!ModelState.IsValid)
 			{
@@ -68,22 +78,19 @@ namespace CoreWiki.Pages
 
 			//check if the slug already exists in the database.
 			Logger.LogWarning($"Creating page with slug: {slug}");
-			var isAvailable = !_context.Articles.Any(x => x.Slug == slug);
 
-			if (isAvailable == false)
+			if (await _articleRepo.IsTopicAvailable(slug, 0))
 			{
 				ModelState.AddModelError("Article.Topic", "This Title already exists.");
 				return Page();
 			}
 
-			Article.Published = _clock.GetCurrentInstant();
-			// Article.Slug = slug;
+			article.Published = _clock.GetCurrentInstant();
 
-			_context.Articles.Add(Article);
-			_context.ArticleHistories.Add(ArticleHistory.FromArticle(Article));
-			await _context.SaveChangesAsync();
+			article = await _articleRepo.CreateArticleAndHistory(article);
 
-			var articlesToCreateFromLinks = ArticleHelpers.GetArticlesToCreate(_context, Article, createSlug: true)
+
+			var articlesToCreateFromLinks = (await ArticleHelpers.GetArticlesToCreate(_articleRepo, article, createSlug: true))
 				.ToList();
 
 			if (articlesToCreateFromLinks.Count > 0)
@@ -91,7 +98,7 @@ namespace CoreWiki.Pages
 				return RedirectToPage("CreateArticleFromLink", new { id = slug });
 			}
 
-			return Redirect($"/{Article.Slug}");
+			return Redirect($"/wiki/{article.Slug}");
 		}
 	}
 }
