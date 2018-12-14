@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Security.Claims;
 using AutoMapper;
 using CoreWiki.Application.Articles.Managing.Commands;
 using CoreWiki.Application.Articles.Reading.Commands;
 using CoreWiki.Application.Articles.Reading.Dto;
+using CoreWiki.Application.Articles.Search.Dto;
 using CoreWiki.Application.Common;
+using CoreWiki.Data.EntityFramework.Security;
 using CoreWiki.ViewModels;
 
 namespace CoreWiki.Configuration.Startup
@@ -22,21 +25,31 @@ namespace CoreWiki.Configuration.Startup
 			CreateMap<ClaimsPrincipal, CreateNewCommentCommand>(MemberList.None)
 				.ForMember(d => d.AuthorId, m => m.MapFrom(s => Guid.Parse(s.FindFirstValue(ClaimTypes.NameIdentifier))));
 
-			CreateMap<string, CreateNewArticleCommand>(MemberList.None)
-				.ForMember(d => d.Content, m => m.UseValue(string.Empty))
-				.ForMember(d => d.Slug, m => m.MapFrom(s => s))
-				.ForMember(d => d.Topic, m => m.MapFrom(s => UrlHelpers.SlugToTopic(s)));
-			CreateMap<ArticleCreate, CreateNewArticleCommand>(MemberList.Source)
-				.ForMember(d => d.Slug, m => m.MapFrom(s => s.Content))
-				.ForMember(d => d.Slug, m => m.MapFrom(s => UrlHelpers.URLFriendly(s.Topic)));
+			CreateMap<ArticleCreate, CreateNewArticleCommand>(MemberList.Source);
 			CreateMap<ClaimsPrincipal, CreateNewArticleCommand>(MemberList.None)
 				.ForMember(d => d.AuthorId, m => m.MapFrom(s => Guid.Parse(s.FindFirstValue(ClaimTypes.NameIdentifier))))
 				.ForMember(d => d.AuthorName, m => m.MapFrom(s => s.Identity.Name));
+			CreateMap<CoreWikiUser, CreateNewArticleCommand>(MemberList.None)
+				.ForMember(d => d.AuthorId, m => m.MapFrom(s => Guid.Parse(s.Id)))
+				.ForMember(d => d.AuthorName, m => m.MapFrom(s => s.DisplayName));
 
-			CreateMap<ArticleEdit, EditArticleCommand>(MemberList.Source);
+			CreateMap<ClaimsPrincipal, CreateSkeletonArticleCommand>(MemberList.None)
+				.ForMember(d => d.AuthorId, m => m.MapFrom(s => Guid.Parse(s.FindFirstValue(ClaimTypes.NameIdentifier))))
+				.ForMember(d => d.AuthorName, m => m.MapFrom(s => s.Identity.Name));
+
+
+			CreateMap<ArticleEdit, EditArticleCommand>(MemberList.Source)
+				.ForSourceMember(d => d.Slug, m => m.Ignore());
 			CreateMap<ClaimsPrincipal, EditArticleCommand>(MemberList.None)
 				.ForMember(d => d.AuthorId, m => m.MapFrom(s => Guid.Parse(s.FindFirstValue(ClaimTypes.NameIdentifier))))
 				.ForMember(d => d.AuthorName, m => m.MapFrom(s => s.Identity.Name));
+			CreateMap<CoreWikiUser, EditArticleCommand>(MemberList.None)
+				.ForMember(d => d.AuthorId, m => m.MapFrom(s => Guid.Parse(s.Id)))
+				.ForMember(d => d.AuthorName, m => m.MapFrom(s => s.DisplayName));
+
+			CreateMap<IList<ArticleReadingDto>, SearchResultDto<ArticleSummary>>(MemberList.None)
+				.ForMember(d => d.Results, m => m.MapFrom(s => s))
+				.ForMember(d => d.TotalResults, m => m.MapFrom(s => s.Count));
 		}
 	}
 }

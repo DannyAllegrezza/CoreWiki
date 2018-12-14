@@ -4,7 +4,7 @@ using MediatR;
 
 namespace CoreWiki.Application.Articles.Managing.Commands
 {
-	public class CreateNewArticleCommand : IRequest<CommandResult>
+    public class CreateNewArticleCommand : IRequest<CommandResult>
 	{
 
 		public string Topic { get; set; }
@@ -15,7 +15,7 @@ namespace CoreWiki.Application.Articles.Managing.Commands
 
 		public string AuthorName { get; set; }
 
-		public string Slug { get; set; }
-
 	}
+
+
 }

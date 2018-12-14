@@ -14,6 +14,8 @@ using CoreWiki.Application.Articles.Managing.Commands;
 using CoreWiki.Application.Articles.Managing.Queries;
 using CoreWiki.Application.Common;
 using CoreWiki.Helpers;
+using Microsoft.AspNetCore.Identity;
+using CoreWiki.Data.EntityFramework.Security;
 
 namespace CoreWiki.Pages
 {
@@ -24,12 +26,14 @@ namespace CoreWiki.Pages
 		private readonly IMediator _mediator;
 		private readonly IMapper _mapper;
 		private readonly ILogger _logger;
+		private readonly UserManager<CoreWikiUser> _userManager;
 
-		public CreateModel(IMediator mediator, IMapper mapper, ILoggerFactory loggerFactory)
+		public CreateModel(IMediator mediator, IMapper mapper, ILoggerFactory loggerFactory, UserManager<CoreWikiUser> userManager)
 		{
 			_mediator = mediator;
 			_mapper = mapper;
 			_logger = loggerFactory.CreateLogger("CreatePage");
+			_userManager = userManager;
 		}
 
 		public async Task<IActionResult> OnGetAsync(string slug = "")
@@ -50,6 +54,7 @@ namespace CoreWiki.Pages
 			}
 			else
 			{
+				// TODO: Convert this to use a PageRoute
 				return Redirect($"/{slug}/Edit");
 			}
 
@@ -57,12 +62,12 @@ namespace CoreWiki.Pages
 		}
 
 		[BindProperty]
-		public ArticleCreate Article { get; set; }   
+		public ArticleCreate Article { get; set; }
 
 		public async Task<IActionResult> OnPostAsync()
 		{
-			var slug = UrlHelpers.URLFriendly(Article.Topic);
-			if (string.IsNullOrWhiteSpace(slug))
+			//var slug = UrlHelpers.URLFriendly(Article.Topic);
+			if (string.IsNullOrWhiteSpace(Article.Topic))
 			{
 				ModelState.AddModelError("Article.Topic", "The Topic must contain at least one alphanumeric character.");
 				return Page();
@@ -70,9 +75,9 @@ namespace CoreWiki.Pages
 
 			if (!ModelState.IsValid) { return Page(); }
 
-			_logger.LogWarning($"Creating page with slug: {slug}");
+			_logger.LogWarning($"Creating page with topic: {Article.Topic}");
 
-			var isTopicAvailable = new GetIsTopicAvailableQuery {Slug = slug, ArticleId = 0};
+			var isTopicAvailable = new GetIsTopicAvailableQuery {Topic = Article.Topic, ArticleId = 0};
 			if (await _mediator.Send(isTopicAvailable))
 			{
 				ModelState.AddModelError("Article.Topic", "This Title already exists.");
@@ -80,21 +85,22 @@ namespace CoreWiki.Pages
 			}
 
 			var cmd = _mapper.Map<CreateNewArticleCommand>(Article);
-			cmd = _mapper.Map(User, cmd);
+			var cwUser = await _userManager.GetUserAsync(User);
+			cmd = _mapper.Map(cwUser, cmd);
 
 			var cmdResult = await _mediator.Send(cmd);
 
 			// TODO: Inspect result to ensure it ran properly
 
-			var query = new GetArticlesToCreateFromArticleQuery(slug);
-			var listOfSlugs = await _mediator.Send(query);
+			// var query = new GetArticlesToCreateFromArticleQuery(cmdResult.ObjectId);
+			// var listOfSlugs = await _mediator.Send(query);
 
-			if (listOfSlugs.Any())
-			{
-				return RedirectToPage("CreateArticleFromLink", new { id = slug });
-			}
+			// if (listOfSlugs.Item2.Any())
+			// {
+			// 	return RedirectToPage("CreateArticleFromLink", new { id = listOfSlugs.Item1 });
+			// }
 
-			return Redirect($"/wiki/{slug}");
+			return RedirectToPage("Details", new {slug=cmdResult.ObjectId.ToString()});
 
 		}
 	}

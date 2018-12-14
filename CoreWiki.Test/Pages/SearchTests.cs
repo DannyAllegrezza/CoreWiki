@@ -1,8 +1,6 @@
-﻿using CoreWiki.Application.Articles.Search;
-using CoreWiki.Application.Articles.Search.Dto;
+﻿using CoreWiki.Application.Articles.Search.Dto;
 using CoreWiki.Application.Articles.Search.Queries;
-using CoreWiki.Core.Domain;
-using CoreWiki.Data.Abstractions.Interfaces;
+using CoreWiki.Configuration.Startup;
 using CoreWiki.Pages;
 using MediatR;
 using Moq;
@@ -22,7 +20,7 @@ namespace CoreWiki.Test.Pages
 			var mediator = new Mock<IMediator>();
 
 			mediator.Setup(o => o.Send(It.IsAny<SearchArticlesQuery>(), default(CancellationToken))).Returns(
-				Task.FromResult(new SearchResult<ArticleSearchDto>
+				Task.FromResult(new SearchResultDto<ArticleSearchDto>
 				{
 					CurrentPage = 2,
 					Results = new List<ArticleSearchDto>
@@ -33,7 +31,7 @@ namespace CoreWiki.Test.Pages
 				}));
 
 			// Act
-			var searchModel = new SearchModel(mediator.Object);
+			var searchModel = new SearchModel(mediator.Object, ConfigureAutomapperServices.ConfigureAutomapper(null));
 
 			var result = await searchModel.OnGetAsync(query: "test", pageNumber: 2);
 

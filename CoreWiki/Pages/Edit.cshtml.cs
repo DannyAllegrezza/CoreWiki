@@ -14,6 +14,9 @@ using CoreWiki.Application.Articles.Managing.Queries;
 using CoreWiki.Application.Common;
 using Microsoft.AspNetCore.Authorization;
 using CoreWiki.Areas.Identity;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Identity;
+using CoreWiki.Data.EntityFramework.Security;
 
 namespace CoreWiki.Pages
 {
@@ -24,11 +27,15 @@ namespace CoreWiki.Pages
 
 		private readonly IMediator _mediator;
 		private readonly IMapper _mapper;
+		private readonly ILogger _Logger;
+		private readonly UserManager<CoreWikiUser> _UserManager;
 
-		public EditModel(IMediator mediator, IMapper mapper)
+		public EditModel(IMediator mediator, IMapper mapper, ILoggerFactory loggerFactory, UserManager<CoreWikiUser> userManager)
 		{
 			_mediator = mediator;
 			_mapper = mapper;
+			_Logger = loggerFactory.CreateLogger("EditPage");
+			_UserManager = userManager;
 		}
 
 		[BindProperty]
@@ -62,7 +69,8 @@ namespace CoreWiki.Pages
 			}
 
 			var cmd = _mapper.Map<EditArticleCommand>(Article);
-			cmd =_mapper.Map(User, cmd);
+			var cwUser = await _UserManager.GetUserAsync(User);
+			cmd = _mapper.Map(cwUser, cmd);
 
 			var result = await _mediator.Send(cmd);
 
@@ -70,24 +78,30 @@ namespace CoreWiki.Pages
 			{
 				ModelState.AddModelError("Article.Topic", result.Exception.Message);
 				return Page();
-			} else if (result.Exception is ArticleNotFoundException)
+			}
+			else if (result.Exception is ArticleNotFoundException)
 			{
 				return new ArticleNotFoundResult();
 			}
 
-			var query = new GetArticlesToCreateFromArticleQuery(UrlHelpers.URLFriendly(Article.Topic));
-			var listOfSlugs = await _mediator.Send(query);
+			// var query = new GetArticlesToCreateFromArticleQuery(Article.Id);
+			// var listOfSlugs = await _mediator.Send(query);
 
-			if (listOfSlugs.Any())
-			{
-				return RedirectToPage("CreateArticleFromLink", new { id = UrlHelpers.URLFriendly(Article.Topic) });
-			}
+			// _Logger.LogWarning($"Found the following links to create: {string.Join(',', listOfSlugs.Item2) }");
+			// _Logger.LogWarning($"Routing for slug: {listOfSlugs.Item1}");
 
-			return Redirect($"/wiki/{(UrlHelpers.URLFriendly(Article.Topic) == UrlHelpers.HomePageSlug ? "" : UrlHelpers.URLFriendly(Article.Topic))}");
+			// if (listOfSlugs.Item2.Any())
+			// {
+			// 	return RedirectToPage("CreateArticleFromLink", new { id = listOfSlugs.Item1 });
+			// }
+
+			_Logger.LogWarning($"Routing for the slug: {result.ObjectId}");
+
+			return RedirectToPage("Details", new { Slug = (result.ObjectId == Constants.HomePageSlug ? "" : result.ObjectId) });
 
 		}
 
-		
+
 	}
 
 }

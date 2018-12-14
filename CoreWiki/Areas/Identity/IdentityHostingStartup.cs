@@ -21,7 +21,11 @@ namespace CoreWiki.Areas.Identity
 				ConfigureDb(context, services);
 
 				services.AddIdentity<CoreWikiUser, IdentityRole>(options =>
-						options.SignIn.RequireConfirmedEmail = requireConfirmedEmail)
+				{
+					options.SignIn.RequireConfirmedEmail = requireConfirmedEmail;
+					options.User.RequireUniqueEmail = true;
+					options.User.AllowedUserNameCharacters = options.User.AllowedUserNameCharacters.Replace("@","");
+				})
 					.AddRoles<IdentityRole>()
 					.AddRoleManager<RoleManager<IdentityRole>>()
 					.AddDefaultUI()
@@ -65,7 +69,10 @@ namespace CoreWiki.Areas.Identity
 					break;
 				default:
 					connectionString = !string.IsNullOrEmpty(connectionString) ? connectionString : "DataSource =./App_Data/wikiIdentity.db";
-					optionsBuilder = options => options.UseSqlite(connectionString);
+					optionsBuilder = options => options.UseSqlite(connectionString, o =>
+					{
+						o.MigrationsAssembly("CoreWiki.Data.EntityFramework");
+					});
 					break;
 			}
 
